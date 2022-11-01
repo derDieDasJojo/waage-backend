@@ -2,6 +2,7 @@
 from flask import Flask, jsonify, request
 from .entities.entity import Session, engine, Base
 from .entities.products import Product, ProductSchema
+from .entities.exam import Exam, ExamSchema
 
 # creating the Flask application
 app = Flask(__name__)
@@ -9,6 +10,41 @@ app = Flask(__name__)
 # if needed, generate database schema
 Base.metadata.create_all(engine)
 
+@app.route('/')
+def get_base():
+    return jsonify({'key': 'value'})
+
+@app.route('/exams')
+def get_exams():
+    # fetching from the database
+    session = Session()
+    exam_objects = session.query(Exam).all()
+
+    # transforming into JSON-serializable objects
+    schema = ExamSchema(many=True)
+    exams = schema.dump(exam_objects)
+
+    # serializing as JSON
+    session.close()
+    return jsonify(exams)
+
+@app.route('/exams', methods=['POST'])
+def add_exam():
+    # mount exam object
+    posted_exam = ExamSchema(only=('title', 'description'))\
+        .load(request.get_json())
+
+    exam = Exam(**posted_exam, created_by="HTTP post request")
+
+    # persist exam
+    session = Session()
+    session.add(exam)
+    session.commit()
+
+    # return created exam
+    new_exam = ExamSchema().dump(exam)
+    session.close()
+    return jsonify(new_exam), 201
 
 @app.route('/products')
 def get_products():
@@ -18,11 +54,11 @@ def get_products():
 
     # transforming into JSON-serializable objects
     schema = ProductSchema(many=True)
-    exams = schema.dump(product_objects)
+    product = schema.dump(product_objects)
 
     # serializing as JSON
     session.close()
-    return jsonify(exams.data)
+    return jsonify(product)
 
 
 @app.route('/products', methods=['POST'])
@@ -31,7 +67,7 @@ def add_products():
     posted_product = ProductSchema(only=('name', 'description'))\
         .load(request.get_json())
 
-    product = Product(**posted_product.data, created_by="HTTP post request")
+    product = Product(**posted_product, created_by="HTTP post request")
 
     # persist exam
     session = Session()
@@ -39,9 +75,9 @@ def add_products():
     session.commit()
 
     # return created exam
-    new_exam = ProductSchema().dump(product).data
+    new_product = ProductSchema().dump(product)
     session.close()
-    return jsonify(new_exam), 201
+    return jsonify(new_product), 201
 
 # # generate database schema
 # Base.metadata.create_all(engine)
