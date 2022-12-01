@@ -4,6 +4,16 @@ from flask_cors import CORS
 from .entities.entity import Session, engine, Base
 from .entities.products import Product, ProductSchema
 from .entities.exam import Exam, ExamSchema
+from .entities.scale import Scale, ScaleSchema
+from sqlalchemy import desc
+
+
+EMULATE_HX711=True
+if not EMULATE_HX711:
+    import RPi.GPIO as GPIO
+    from .hx711.hx711 import HX711
+else:
+    from .hx711.emulated_hx711 import HX711
 # ... other import statements ...
 
 # creating the Flask application
@@ -69,7 +79,6 @@ def add_products():
     # mount exam object
     posted_product = ProductSchema(only=('name', 'description'))\
         .load(request.get_json())
-
     product = Product(**posted_product, created_by="HTTP post request")
 
     # persist exam
@@ -81,6 +90,87 @@ def add_products():
     new_product = ProductSchema().dump(product)
     session.close()
     return jsonify(new_product), 201
+
+@app.route('/scale/tare' , methods=['GET','POST'])
+def init_scale():
+    # set static values
+    reference_unit = 9955
+
+    # initialize scale
+    hx = configure_hx(offset=0, reference_unit=reference_unit)
+    hx.tare(30)
+    offset = hx.get_offset()
+    print("Tare done! Add weight now...")
+
+
+    scale = Scale(offset, reference_unit,created_by="")
+
+    # persist scale
+    session = Session()
+    session.add(scale)
+    session.commit()
+
+    # return created exam
+    new_scale = ProductSchema().dump(scale)
+    session.close()
+
+
+    #return config
+    return jsonify({"offset":offset,"reference_unit":reference_unit}), 201
+
+@app.route('/scale/config')
+def getConfig():
+    scale = getConfigFromDB()
+
+    return jsonify(scale)
+
+@app.route('/scale')
+def getWeight():
+    scale = getConfigFromDB()
+    hx = configure_hx(scale['offset'], scale['reference_unit'])
+    try:
+        val = hx.get_weight(9)
+        print("{0:.2f} kg".format(val))
+        hx.power_down()
+        hx.power_up()
+        #return val
+        return jsonify(val), 201
+
+    except (KeyboardInterrupt, SystemExit):
+        cleanAndExit()
+
+
+def getConfigFromDB():
+    # fetching from the database
+    session = Session()
+    scale_objects = session.query(Scale).order_by(desc(Scale.updated_at)).first()
+
+    # transforming into JSON-serializable objects
+    schema = ScaleSchema(many=False)
+    scale = schema.dump(scale_objects)
+
+    # serializing as JSON
+    session.close()
+
+    return scale
+
+def configure_hx(offset, reference_unit):
+    # setup AD Converter
+    hx = HX711(5, 6)
+    hx.set_reading_format("MSB", "MSB")
+    hx.set_reference_unit(reference_unit)
+    hx.set_offset(offset)
+    hx.reset()
+    return hx
+
+def cleanAndExit():
+    print("Cleaning...")
+
+    if not EMULATE_HX711:
+        GPIO.cleanup()
+
+    print("Bye!")
+    sys.exit()
 
 # # generate database schema
 # Base.metadata.create_all(engine)

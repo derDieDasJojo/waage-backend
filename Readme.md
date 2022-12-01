@@ -1,18 +1,40 @@
 # Waage-Backend
 Flask (Python) Backend of the Solawi-Waage.
 
+
+# Prerequirements:
+
+- python3
+- pipenv
+- flask
+- sqlite
+
+```
+sudo apt-get install pipenv python3-flask
+```
+
 # Running
 
 
 
 ```
-docker run --name online-exam-db     -p 5432:5432     -e POSTGRES_DB=online-exam     -e POSTGRES_PASSWORD=0NLIN3-ex4m     -d postgres
-
 ./bootstrap.sh
 ```
 
 ## Test it
 
+```
+# get current weight of the Scale
+curl 0.0.0.0:5000/scale
+
+# tare Scale
+curl -X POST 0.0.0.0:5000/scale/tare
+
+# get configuration (for debug purpose)
+curl 0.0.0.0:5000/scale/config
+```
+
+## Other Things that did only make sense while development
 ```
 # create a new product
 curl -X POST -H 'Content-Type: application/json' -d '{
